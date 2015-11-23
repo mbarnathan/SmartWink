@@ -43,7 +43,7 @@ def parse(description) {
     if (description == "updated") {
         //do nothing
         log.trace "Wink hub was updated"
-        return [];
+        return []
     }
 
     def results = [];
@@ -51,18 +51,6 @@ def parse(description) {
     if (map?.name && map?.value) {
         log.trace "Wink hub, GENERATING EVENT: $map.name: $map.value"
         results << createEvent(name: "${map.name}", value: "${map.value}")
-    } else {
-        log.trace "Parsing description"
-        def msg = parseLanMessage(description)
-        if (msg.body) {
-            def contentType = msg.headers["Content-Type"]
-            if (contentType?.contains("json")) {
-                def json = new groovy.json.JsonSlurper().parseText(msg.body)
-                if (parent.state.inDeviceDiscovery) {
-                    log.info parent.populateDevices(this, json)
-                }
-            }
-        }
     }
-    results
+    return results
 }

@@ -21,20 +21,26 @@ preferences {
 }
 
 def installed() {
-    log.trace "Installed with settings: ${settings}"
+    log.trace "SmartWink Installed with settings: ${settings}"
+    state.inDeviceDiscovery = false
     initialize()
 }
 
+def uninstalled() {
+    getChildDevices().each { deleteChildDevice(it.deviceNetworkId) }
+    log.trace "SmartWink uninstalled"
+}
+
 def updated() {
-    log.trace "Updated with settings: ${settings}"
+    log.trace "SmartWink updated with settings: ${settings}"
     unschedule()
     initialize()
 }
 
 def initialize() {
-    log.debug "Initializing"
+    log.debug "Initializing SmartWink"
     unsubscribe()
-    state.inDeviceDiscovery = false
+    subscribe(location, null, onLocation, [filterEvents:false])
 }
 
 // <editor-fold desc="Hub Discovery - returns map selectedHubs [mac: name]">
@@ -42,60 +48,100 @@ def initialize() {
 def hubDiscovery() {
     def refreshInterval = 3
 
-    state.hubMap = state.hubMap ?: []
-    state.refreshes = (state.refreshes ?: 0) + 1
+    state.hubMacToIp = state.hubMacToIp ?: []
+    state.hubRefreshes = (state.hubRefreshes ?: 0) + 1
 
-    if (state.refreshes % 5 == 1) {
+    if (state.hubRefreshes == 1) {
+        subscribe(location, null, onLocation, [filterEvents:false])
+    }
+
+    if (state.hubRefreshes % 5 == 1) {
         startMdnsDiscovery("._wink._tcp")
     }
 
     dynamicPage(name:"hubDiscovery", title:"Hub Discovery Started!", nextPage:"deviceDiscovery", refreshInterval:refreshInterval, install:false, uninstall: true) {
         section("Please wait while we discover your Wink Hubs. This could take a few minutes. Select your device below once discovered.") {
-            input "selectedHubs", "enum", required:true, title:"Select Wink Hub (${state.hubMap.size()} found)", multiple:true, options: state.hubMap
+            input "selectedHubs", "enum", required:true, title:"Select Wink Hub (${state.hubMacToIp.size()} found)", multiple:true, options: state.hubMacToIp
         }
     }
 }
 
 def startMdnsDiscovery(name) {
 //	sendHubCommand(new physicalgraph.device.HubAction("lan discovery mdns/dns-sd ${name}", physicalgraph.device.Protocol.LAN))
-    subscribe(location, null, onDiscovery, [filterEvents:false])
-    state.hubMap = [
-            "MA:AA:AA:AA:AC": "1_1_1_1:1080"
+    state.hubMacToIp = [
+            "34:23:BA:EC:17:52": "10_3_0_5:1080"
     ]
+    populateHubs(state.hubMacToIp.keySet())
 }
 
-def onDiscovery(evt) {
+def onLocation(evt) {
     def description = evt.description
-    log.trace "Wink Hub Location Event: ${description}"
+    log.trace "SmartWink Location Event: ${description}"
 
     def parsedEvent = parseLanMessage(description)
     def rawMac = parsedEvent.mac
-    def hub = ""
+    def mac = ""
     rawMac.eachWithIndex { macChar, macIndex ->
         if (macIndex % 2 == 0 && macIndex != 0) {
-            hub += ":"
+            mac += ":"
         }
-        hub += macChar
+        mac += macChar
     }
-
-    parsedEvent << ["hub": hub]
 
     if (parsedEvent.mdnsPath) {
-        def hubs = getHubs()
-        if (!(hubs."${parsedEvent?.mac?.toString()}")) {
-            hubs << ["${parsedEvent?.mac?.toString()}": parsedEvent]
-        }
-        state.hubMap = hubsToMap(hubs)
+        discoveredHub(parsedEvent)
     } else if (parsedEvent.headers && parsedEvent.body && parsedEvent.headers["Content-Type"]?.contains("json")) {
-        log.trace "Got JSON response from Wink Hub: ${parsedEvent.body}"
+        def responseType = parsedEvent.headers["X-Response"]
+        log.trace "Got JSON response (X-Response: ${responseType}) from Wink Hub: ${parsedEvent.body}"
+
         def json = new groovy.json.JsonSlurper().parseText(parsedEvent.body)
         log.trace "Parsed JSON into ${json}"
-        if (state.inDeviceDiscovery) {
-            populateDevices(hub, json)
-        } else {
-            log.warn "Not in device discovery mode, not adding device"
+
+        switch (responseType ?: "") {
+            case "DEVICE_DISCOVERY":
+                if (state.inDeviceDiscovery) {
+                    populateDevices(mac, json)
+                } else {
+                    log.info "SmartWink received device discovery results, but not in discovery mode. Ignoring."
+                }
+                break
+            case "DEVICE_EVENT":
+                // These events are supposed to fire parse(), but because that relies on the DNI being the MAC address,
+                // and since these events are all coming from the same MAC, we must handle it here instead.
+                return dispatchDeviceEvent(parsedEvent, mac, json)
+            case "":
+                log.debug "Empty X-Response, probably not a SmartWink message. Ignoring."
+                break
+            default:
+                log.warn "Unknown X-Response ${responseType} (SmartApp and Wink Hub on different SmartWink versions?), ignoring."
+                break
         }
     }
+    return parsedEvent
+}
+
+private discoveredHub(parsedEvent) {
+    // Found a hub. Check if it already exists, and add it if not.
+    def hubs = getHubs()
+    if (!(hubs."${parsedEvent?.mac?.toString()}")) {
+        hubs << ["${parsedEvent?.mac?.toString()}": parsedEvent]
+    }
+    state.hubMacToIp = hubsToMap(hubs)
+}
+
+private dispatchDeviceEvent(parsedEvent, hub, json) {
+    if (!json.serial) {
+        log.warn "No device serial in device dispatch JSON message. Ignoring."
+        return
+    }
+
+    def device = getChildDevice("${json.serial}")
+    if (!device) {
+        log.warn "Couldn't find device for ${json.serial}. Ignoring device event."
+        return
+    }
+
+    device.handleEvent(parsedEvent, hub, json)
 }
 
 def getHubs() {
@@ -123,10 +169,16 @@ def getHubAddress(hubSerial) {
 }
 
 def asHub(hubMac) {
-    def hubSerial = state.hubMap[hubMac]
+    def hubSerial = state.hubMacToIp[hubMac]
     log.debug "Hub MAC: ${hubMac}, Serial: ${hubSerial}"
-    def newHub = getChildDevice(hubMac) ?:
-            addChildDevice("smartwink", "Wink Hub", hubMac, null, [name: "Wink Hub", completedSetup: true])
+
+    def newHub = getChildDevice(hubMac)
+    if (newHub) {
+        log.info("Found existing hub device with MAC ${hubMac}")
+    } else {
+        log.info("Creating new hub device with MAC ${hubMac}")
+        newHub = addChildDevice("smartwink", "Wink Hub", hubMac, location.hubs[0].id, [name: "Wink Hub", completedSetup: true])
+    }
     def ip = getHubAddress(hubSerial)
     newHub.sendEvent(name:"networkAddress", value: ip)
     newHub.updateDataValue("networkAddress", ip)
@@ -138,17 +190,33 @@ def asHub(hubMac) {
 // <editor-fold desc="Device Discovery">
 
 def deviceDiscovery() {
-    log.debug "Selected hubs: ${selectedHubs}"
-    def refreshInterval = 30
-    state.inDeviceDiscovery = true
-    state.deviceMap = state.deviceMap ?: []
+    def refreshInterval = 3
 
-    def hubsToDiscover = populateHubs(selectedHubs)
-    hubsToDiscover.each { hub -> discoverLutronDevices(hub)	}
+    state.inDeviceDiscovery = true
+    state.discoveredDevices = state.discoveredDevices ?: [:]
+
+    def deviceMap = [:]
+    state.discoveredDevices.each { hub, deviceSerials ->
+        deviceSerials.each { deviceSerial ->
+            def device = getChildDevice("${deviceSerial}")
+            if (device) {
+                deviceMap[deviceSerial] = "${device.name} (${deviceSerial})"
+            } else {
+                log.error "Couldn't find device corresponding to ${deviceSerial}"
+            }
+        }
+    }
+
+    log.info("Discovered devices: ${state.discoveredDevices}, flattened to ${deviceMap}")
+    state.deviceRefreshes = (state.deviceRefreshes ?: 0) + 1
+
+    if (state.deviceRefreshes % 5 == 1) {
+        selectedHubs.each { discoverLutronDevices(getChildDevice(it)) }
+    }
 
     dynamicPage(name:"deviceDiscovery", title:"Device Discovery Started!", nextPage:"deviceDiscovery", refreshInterval:refreshInterval, install:true, uninstall: false) {
         section("Lutron Devices:") {
-            input "selectedDevices", "enum", required:true, title:"Select devices to manage (${state.deviceMap.size()} found)", multiple:true, options: state.deviceMap
+            input "selectedDevices", "enum", required:true, title:"Select devices to manage (${deviceMap.size()} found)", multiple:true, options: deviceMap
         }
     }
 }
@@ -163,28 +231,35 @@ def deviceDiscovery() {
 	  },
 	  ...
 	]
-
-	Will be called from the hub's parse() method.
 */
 def populateDevices(hub, response) {
     log.debug "Got JSON data from Wink Hub (${hub}): ${response}"
-    return response.collect({ asDevice(it, hub) })
+    state.discoveredDevices[hub] = response.collect({
+        asDevice(it, hub)
+        it.serial
+    })
 }
 
 def asDevice(jsonDevice, hub) {
     log.info "Found device ${jsonDevice}! Adding to devices."
-    newDevice = getChildDevice(jsonDevice.serial) ?:
-            addChildDevice("smartwink", "${jsonDevice.type}", "${jsonDevice.serial}", hub, [name: jsonDevice.name, completedSetup: true])
-
-    return getChildDevice(jsonDevice.serial) ?:
-            addChildDevice("smartwink", "${jsonDevice.type}", "${jsonDevice.serial}", hub, [name:jsonDevice.name, completedSetup: true])
+    def device = getChildDevice("${jsonDevice.serial}")
+    if (!device) {
+        def winkHub = getChildDevice(hub)
+        def hubAddr = winkHub.getDataValue("networkAddress")
+        device = addChildDevice("smartwink", "${jsonDevice.type}", "${jsonDevice.serial}", location.hubs[0].id,
+                                [name: jsonDevice.name, completedSetup: true])
+        device.sendEvent(name:"hubAddress", value: hubAddr)
+        device.updateDataValue("hubAddress", hubAddr)
+        device.refresh()
+    }
+    return device
 }
 
 def discoverLutronDevices(hub) {
     def netAddr = hub.getDeviceDataByName("networkAddress") ?: hub.latestState('networkAddress')?.stringValue
     def dni = hub.deviceNetworkId
 
-    log.info("Disovering devices on ${dni}: GET http://${netAddr}/lutron.php")
+    log.info("Discovering devices on ${dni}: GET http://${netAddr}/lutron.php. Device discovery mode? ${state.inDeviceDiscovery}")
 
     sendHubCommand(new physicalgraph.device.HubAction([
             method: "GET",

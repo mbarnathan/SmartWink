@@ -18,11 +18,14 @@ definition(
 preferences {
     page(name: "hubDiscovery", title:"Hub Discovery", nextPage: "deviceDiscovery")
     page(name: "deviceDiscovery", title:"Lutron Device Discovery")
+    page(name: "pairing", title:"Pairing Started!")
 }
 
 def installed() {
     log.trace "SmartWink Installed with settings: ${settings}"
     state.inDeviceDiscovery = false
+    state.pairingMode = false
+    state.pairStatus = null as Boolean
     initialize()
 }
 
@@ -61,6 +64,7 @@ def hubDiscovery() {
 
     dynamicPage(name:"hubDiscovery", title:"Hub Discovery Started!", nextPage:"deviceDiscovery", refreshInterval:refreshInterval, install:false, uninstall: true) {
         section("Please wait while we discover your Wink Hubs. This could take a few minutes. Select your device below once discovered.") {
+            // TODO: multiple: true can be enabled once pairing in that scenario is worked out.
             input "selectedHubs", "enum", required:true, title:"Select Wink Hub (${state.hubMacToIp.size()} found)", multiple:true, options: state.hubMacToIp
         }
     }
@@ -103,6 +107,22 @@ def onLocation(evt) {
                     populateDevices(mac, json)
                 } else {
                     log.info "SmartWink received device discovery results, but not in discovery mode. Ignoring."
+                }
+                break
+            case "DEVICE_PAIRED":
+                def status = json.status ?: "unknown"
+                log.info "Got pairing response from Wink Hub: ${status}"
+                if (state.pairingMode) {
+                    if (status == "ready") {
+                        log.warn "Ready to pair status when already in pairing mode? Ignoring."
+                    } else {
+                        state.pairStatus = (status == "FLX_OK") as Boolean
+                        state.pairingMode = false
+                        log.info "Wink Hub pairing completed, status ${state.pairStatus}."
+                    }
+                } else if (status == "ready") {
+                    log.info "Ready to pair Wink Hub"
+                    state.pairingMode = true
                 }
                 break
             case "DEVICE_EVENT":
@@ -193,7 +213,14 @@ def deviceDiscovery() {
     def refreshInterval = 3
 
     state.inDeviceDiscovery = true
+    state.pairingMode = false
     state.discoveredDevices = state.discoveredDevices ?: [:]
+
+    state.deviceRefreshes = (state.deviceRefreshes ?: 0) + 1
+
+    if (state.deviceRefreshes % 5 == 1) {
+        selectedHubs.each { discoverLutronDevices(getChildDevice(it)) }
+    }
 
     def deviceMap = [:]
     state.discoveredDevices.each { hub, deviceSerials ->
@@ -208,17 +235,65 @@ def deviceDiscovery() {
     }
 
     log.info("Discovered devices: ${state.discoveredDevices}, flattened to ${deviceMap}")
-    state.deviceRefreshes = (state.deviceRefreshes ?: 0) + 1
-
-    if (state.deviceRefreshes % 5 == 1) {
-        selectedHubs.each { discoverLutronDevices(getChildDevice(it)) }
-    }
 
     dynamicPage(name:"deviceDiscovery", title:"Device Discovery Started!", nextPage:"deviceDiscovery", refreshInterval:refreshInterval, install:true, uninstall: false) {
         section("Lutron Devices:") {
             input "selectedDevices", "enum", required:true, title:"Select devices to manage (${deviceMap.size()} found)", multiple:true, options: deviceMap
         }
+
+        section("Pair Device:") {
+            href(name: "hrefPair", title: "Pair new device...", description: "Tap to start pairing", required: false, page: pairing)
+        }
     }
+}
+
+def pairing() {
+    def refreshInterval = 3
+
+    state.pairRefreshes = (state.pairRefreshes ?: 0) + 1
+
+    if (state.pairStatus != true && state.pairRefreshes % 10 == 1 && !state.pairingMode) {
+        startPairing(getChildDevice(selectedHubs[0]))
+    }
+
+    def message
+    if (state.pairStatus == true) {
+        message = "Device paired successfully! You can close this dialog and return to device discovery."
+    } else if (state.pairStatus == false && !state.pairingMode) {
+        message = "Pairing failed. Try again in a moment."
+    } else if (!state.pairingMode) {
+        message = "Please wait while we put your hub in pairing mode..."
+    } else {
+        message = "Your Wink Hub is ready to pair. Hold the off button on your new device until the light on the device blinks rapidly."
+    }
+    dynamicPage(name:"pairing", title:"Pairing Started!", refreshInterval:refreshInterval, nextPage:"deviceDiscovery", install:false, uninstall: false) {
+        section("Pair new device...") {
+            paragraph message
+        }
+    }
+}
+
+private getCallBackAddress() {
+    def hub = location.hubs[0]
+    return "${hub.localIP}:${hub.localSrvPortTCP}"
+}
+
+def startPairing(hub) {
+    def netAddr = hub.getDeviceDataByName("networkAddress") ?: hub.latestState('networkAddress')?.stringValue
+    def dni = hub.deviceNetworkId
+
+    def callback = "http://${getCallBackAddress()}/notify/paired"
+    log.info("Sending pairing request to Wink Hub ${dni}: POST http://${netAddr}/pair.php. Callback on ${callback}")
+
+    sendHubCommand(new physicalgraph.device.HubAction([
+            method: "POST",
+            path: "/pair.php",
+            headers: [
+                    HOST: netAddr,
+                    "Content-Length": 0,
+            ],
+            query: [callback: callback]
+    ], "${dni}"))
 }
 
 /* Example schema:
@@ -241,9 +316,10 @@ def populateDevices(hub, response) {
 }
 
 def asDevice(jsonDevice, hub) {
-    log.info "Found device ${jsonDevice}! Adding to devices."
+    log.info "Found device ${jsonDevice}!"
     def device = getChildDevice("${jsonDevice.serial}")
     if (!device) {
+        log.info "Device ${jsonDevice} is new! Adding to devices."
         def winkHub = getChildDevice(hub)
         def hubAddr = winkHub.getDataValue("networkAddress")
         device = addChildDevice("smartwink", "${jsonDevice.type}", "${jsonDevice.serial}", location.hubs[0].id,
@@ -251,6 +327,7 @@ def asDevice(jsonDevice, hub) {
         device.sendEvent(name:"hubAddress", value: hubAddr)
         device.updateDataValue("hubAddress", hubAddr)
         device.refresh()
+        log.info "Successfully added ${jsonDevice} to devices."
     }
     return device
 }

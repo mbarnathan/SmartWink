@@ -99,62 +99,6 @@ def refresh() {
     subscribe()
 }
 
-def subscribe() {
-    subscribe(getUpnpHost(), getUpnpPath())
-}
-
-def unsubscribe() {
-    log.info "Received unsubscribe request for ${device.deviceNetworkId}"
-    unsubscribe(getUpnpHost(), getUpnpPath())
-}
-
-private getUpnpHost() {
-    def upnp_port = 1081
-    def hubAddr = device.currentValue("hubAddress")
-
-    def addressParts = hubAddr.split(":")
-    def host = addressParts[0]
-    return "${host}:${upnp_port}"
-}
-
-private getUpnpPath() {
-    return "/upnp/event/${device.deviceNetworkId}/button"
-}
-
-def subscribe(host, path) {
-    def address = getCallBackAddress()
-    def callbackPath = "http://${address}/notify$path"
-    log.info "Received subscribe for ${device.deviceNetworkId} ($host, $path, $callbackPath)"
-
-    new physicalgraph.device.HubAction(
-            method: "SUBSCRIBE",
-            path: path,
-            headers: [
-                    HOST: host,
-                    CALLBACK: "<${callbackPath}>",
-                    NT: "upnp:event",
-                    TIMEOUT: "Second-3600"
-            ]
-    )
-}
-
-def unsubscribe(host, path) {
-    def sid = getDeviceDataByName("subscriptionId")
-    if (!sid) {
-        log.info "Unsubscribe without sid, probably not subscribed yet."
-        return null
-    }
-    log.trace "unsubscribe($host, $path, $sid)"
-    new physicalgraph.device.HubAction(
-            method: "UNSUBSCRIBE",
-            path: path,
-            headers: [
-                    HOST: formatHost(host),
-                    SID: "uuid:${sid}",
-            ]
-    )
-}
-
 def on() {
     setLevel(100)
 }
@@ -234,10 +178,6 @@ def buttonOn() { return buttonPressed(BUTTON_ON()) }
 def buttonOff() { return buttonPressed(BUTTON_OFF()) }
 def buttonFavorite() { return buttonPressed(BUTTON_FAVORITE()) }
 
-private getCallBackAddress() {
-    device.hub.getDataValue("localIP") + ":" + device.hub.getDataValue("localSrvPortTCP")
-}
-
 def handleEvent(parsedEvent, hub, json) {
     log.info "Pico remote ${device.deviceNetworkId} handling event: ${json}"
     if (json.containsKey("button")) {
@@ -273,4 +213,66 @@ def parse(description) {
         log.warn "Unknown event in Pico remote parse(): ${description}"
         return null
     }
+}
+
+// TODO: Put in m4 block. SmartThings doesn't allow much code reuse.
+
+private getCallBackAddress() {
+    device.hub.getDataValue("localIP") + ":" + device.hub.getDataValue("localSrvPortTCP")
+}
+
+def subscribe() {
+    subscribe(getUpnpHost(), getUpnpPath())
+}
+
+def unsubscribe() {
+    log.info "Received unsubscribe request for ${device.deviceNetworkId}"
+    unsubscribe(getUpnpHost(), getUpnpPath())
+}
+
+private getUpnpHost() {
+    def upnp_port = 1081
+    def hubAddr = device.currentValue("hubAddress")
+
+    def addressParts = hubAddr.split(":")
+    def host = addressParts[0]
+    return "${host}:${upnp_port}"
+}
+
+private getUpnpPath() {
+    return "/upnp/event/${device.deviceNetworkId}/button"
+}
+
+def subscribe(host, path) {
+    def address = getCallBackAddress()
+    def callbackPath = "http://${address}/notify$path"
+    log.info "Received subscribe for ${device.deviceNetworkId} ($host, $path, $callbackPath)"
+
+    new physicalgraph.device.HubAction(
+            method: "SUBSCRIBE",
+            path: path,
+            headers: [
+                    HOST: host,
+                    CALLBACK: "<${callbackPath}>",
+                    NT: "upnp:event",
+                    TIMEOUT: "Second-3600"
+            ]
+    )
+}
+
+def unsubscribe(host, path) {
+    def sid = getDeviceDataByName("subscriptionId")
+    if (!sid) {
+        log.info "Unsubscribe without sid, probably not subscribed yet."
+        return null
+    }
+    log.trace "unsubscribe($host, $path, $sid)"
+    new physicalgraph.device.HubAction(
+            method: "UNSUBSCRIBE",
+            path: path,
+            headers: [
+                    HOST: host,
+                    SID: "uuid:${sid}",
+            ]
+    )
 }

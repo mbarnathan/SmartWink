@@ -22,15 +22,22 @@ preferences {
 }
 
 def installed() {
-    log.trace "SmartWink Installed with settings: ${settings}"
+    log.trace "SmartWink installed with settings: ${settings}"
     state.inDeviceDiscovery = false
     state.pairingMode = false
     state.pairStatus = null as Boolean
+
+    removeHubsExcept(selectedHubs)  // Will also remove child devices on removed hubs
+    populateHubs(selectedHubs)
+
+    removeDevicesExcept(selectedDevices)
+    populateDevices(selectedDevices)
+
     initialize()
 }
 
 def uninstalled() {
-    getChildDevices().each { deleteChildDevice(it.deviceNetworkId) }
+    removeHubsExcept([])
     log.trace "SmartWink uninstalled"
 }
 
@@ -42,6 +49,7 @@ def updated() {
 
 def initialize() {
     log.debug "Initializing SmartWink"
+    state.deviceQueue = [:]
     unsubscribe()
     subscribe(location, null, onLocation, [filterEvents:false])
 }
@@ -51,7 +59,7 @@ def initialize() {
 def hubDiscovery() {
     def refreshInterval = 3
 
-    state.hubMacToIp = state.hubMacToIp ?: [:]
+    state.foundHubs = state.foundHubs ?: [:]
     state.hubRefreshes = (state.hubRefreshes ?: 0) + 1
 
     if (state.hubRefreshes == 1) {
@@ -65,7 +73,7 @@ def hubDiscovery() {
     dynamicPage(name:"hubDiscovery", title:"Hub Discovery Started!", nextPage:"deviceDiscovery", refreshInterval:refreshInterval, install:false, uninstall: true) {
         section("Please wait while we discover your Wink Hubs. This could take a few minutes. Select your device below once discovered.") {
             // TODO: Better pairing support for multiple:true.
-            input "selectedHubs", "enum", required:true, title:"Select Wink Hub (${state.hubMacToIp.size()} found)", multiple:true, options: state.hubMacToIp
+            input "selectedHubs", "enum", required:true, title:"Select Wink Hub (${state.foundHubs.size()} found)", multiple:true, options: state.foundHubs
         }
     }
 }
@@ -101,7 +109,8 @@ def onLocation(evt) {
         switch (responseType ?: "") {
             case "DEVICE_DISCOVERY":
                 if (state.inDeviceDiscovery) {
-                    populateDevices(mac, json)
+                    log.debug "Got JSON data from Wink Hub (${mac}): ${json}"
+                    state.foundDevices[mac] = json
                 } else {
                     log.info "SmartWink received device discovery results, but not in discovery mode. Ignoring."
                 }
@@ -118,7 +127,7 @@ def onLocation(evt) {
                         log.info "Wink Hub pairing completed, status ${state.pairStatus}."
                     }
                 } else if (status == "ready") {
-                    log.info "Ready to pair Wink Hub"
+                    log.info "Ready to pair to Wink Hub"
                     state.pairingMode = true
                 }
                 break
@@ -141,24 +150,68 @@ private discoveredHub(parsedEvent) {
     // Found a hub. Check if it already exists, and add it if not.
     log.info "Found SmartWink Hub via SSDP: ${parsedEvent}"
     if (!parsedEvent?.mac) {
-        log.error "SmartWink SSDP discovery event doesn't seem to have a MAC address."
+        throw new IllegalArgumentException("SmartWink SSDP discovery event doesn't seem to have a MAC address.")
     }
-    def hubs = state.hubMacToIp
+    def foundHubs = state.foundHubs
     def newIp = convertHexToIP(parsedEvent.networkAddress)
-    def lastIp = hubs.put(parsedEvent.mac, newIp)
-    if (lastIp && lastIp != newIp) {
-        //updateHubIp(parsedEvent.mac, lastIp, newIp)
+    def lastIp = foundHubs.put(parsedEvent.mac, newIp)
+    if (lastIp) {
+        updateHubIp(parsedEvent.mac, lastIp, newIp)
     }
 }
 
 private updateHubIp(mac, oldIp, newIp) {
-    log.info "Wink Hub (${mac}) IP changed: ${oldIp} to ${newIp}. Updating child devices."
-    def hub = getChildDevice(mac)
-    if (!hub) {
-        log.info "Couldn't find hub device, likely still in discovery mode."
+    if (oldIp == newIp) {
         return
     }
+
+    def hub = getChildDevice(mac)
+    if (hub) {
+        log.info "Wink Hub (${mac}) IP changed: ${oldIp} to ${newIp}. Updating."
+        hub.sendEvent(name:"networkAddress", value: newIp)
+        hub.updateDataValue("networkAddress", newIp)
+    }
 }
+
+def removeHubsExcept(keptMacs) {
+    def toRemove = getChildDevices().findAll { !keptMacs.contains(it.deviceNetworkId) }
+    log.info "Removing ${toRemove.size()} de-selected Wink Hubs (and all child devices). Keeping ${keptMacs}."
+    toRemove.each { hub ->
+        log.debug "Removing Wink Hub ${hub.deviceNetworkId}"
+        deleteChildDevice(hub.deviceNetworkId)
+    }
+
+    state.foundHubs.keySet().retainAll(keptMacs)
+}
+
+def populateHubs(hubs) {
+    log.info "Creating new SmartThings devices for Wink Hubs: ${hubs}"
+    return hubs.collect({ mac ->
+        def ip = state.foundHubs[mac]
+        asHub(mac, ip)
+    })
+}
+
+def asHub(hubMac, hubAddr) {
+    log.debug "Realizing hub with MAC: ${hubMac}, IP: ${hubAddr}"
+
+    def hubDevice = getChildDevice(hubMac)
+    def oldIp = null
+    if (hubDevice) {
+        log.info("Found existing hub device with MAC ${hubMac}, updating IP if necessary.")
+        oldIp = hubDevice.getDataValue("networkAddress")
+    } else {
+        log.info("Creating new hub device for MAC ${hubMac}")
+        hubDevice = addChildDevice("smartwink", "Wink Hub", hubMac, location.hubs[0].id, [name: "Wink Hub", completedSetup: true])
+    }
+
+    updateHubIp(hubMac, oldIp, hubAddr)
+    return hubDevice
+}
+
+// </editor-fold>
+
+// <editor-fold desc="Device Discovery">
 
 private dispatchDeviceEvent(parsedEvent, hub, json) {
     if (!json.serial) {
@@ -175,61 +228,27 @@ private dispatchDeviceEvent(parsedEvent, hub, json) {
     device.handleEvent(parsedEvent, hub, json)
 }
 
-def populateHubs(hubMacs) {
-    return hubMacs.collect({ asHub(it) })
-}
-
-def getHubAddress(hubSerial) {
-    return hubSerial.replaceAll("_", ".")
-}
-
-def asHub(hubMac) {
-    def hubSerial = state.hubMacToIp[hubMac]
-    log.debug "Hub MAC: ${hubMac}, Serial: ${hubSerial}"
-
-    def newHub = getChildDevice(hubMac)
-    if (newHub) {
-        log.info("Found existing hub device with MAC ${hubMac}")
-    } else {
-        log.info("Creating new hub device with MAC ${hubMac}")
-        newHub = addChildDevice("smartwink", "Wink Hub", hubMac, location.hubs[0].id, [name: "Wink Hub", completedSetup: true])
-    }
-    def ip = getHubAddress(hubSerial)
-    newHub.sendEvent(name:"networkAddress", value: ip)
-    newHub.updateDataValue("networkAddress", ip)
-    return newHub
-}
-
-// </editor-fold>
-
-// <editor-fold desc="Device Discovery">
-
 def deviceDiscovery() {
     def refreshInterval = 3
 
     state.inDeviceDiscovery = true
     state.pairingMode = false
-    state.discoveredDevices = state.discoveredDevices ?: [:]
+    state.foundDevices = state.foundDevices ?: [:]
 
     state.deviceRefreshes = (state.deviceRefreshes ?: 0) + 1
 
     if (state.deviceRefreshes % 5 == 1) {
-        selectedHubs.each { discoverLutronDevices(getChildDevice(it)) }
+        selectedHubs.each { mac -> discoverLutronDevices(mac) }
     }
 
     def deviceMap = [:]
-    state.discoveredDevices.each { hub, deviceSerials ->
-        deviceSerials.each { deviceSerial ->
-            def device = getChildDevice("${deviceSerial}")
-            if (device) {
-                deviceMap[deviceSerial] = "${device.name} (${deviceSerial})"
-            } else {
-                log.error "Couldn't find device corresponding to ${deviceSerial}"
-            }
+    state.foundDevices.each { hub, json ->
+        json.each { device ->
+            deviceMap[device.serial] = "${device.name} (${device.serial})"
         }
     }
 
-    log.info("Discovered devices: ${state.discoveredDevices}, flattened to ${deviceMap}")
+    log.info("Discovered devices: ${state.foundDevices}, flattened to ${deviceMap}")
 
     dynamicPage(name:"deviceDiscovery", title:"Device Discovery Started!", nextPage:"deviceDiscovery", refreshInterval:refreshInterval, install:true, uninstall: false) {
         section("Lutron Devices:") {
@@ -302,20 +321,25 @@ def startPairing(hub) {
 	  ...
 	]
 */
-def populateDevices(hub, response) {
-    log.debug "Got JSON data from Wink Hub (${hub}): ${response}"
-    state.discoveredDevices[hub] = response.collect({
-        asDevice(it, hub)
-        it.serial
+def populateDevices(selected) {
+    def hubToJson = state.foundDevices
+    log.info "Creating SmartThings device nodes for ${hubToJson.size()} Wink Hubs."
+    log.info "${selected.size()} devices are selected by the user."
+    return hubToJson.collect({ hubMac, jsonArray ->
+        def hubDevices = jsonArray \
+                .findAll { selected.containsKey(it.serial) } \
+                .collect({ json -> asDevice(hubMac, json) })
+
+        log.info "Created ${hubDevices.size()} devices for Wink Hub ${hubMac}"
+        hubDevices
     })
 }
 
-def asDevice(jsonDevice, hub) {
+def asDevice(jsonDevice, hubMac) {
     log.info "Found device ${jsonDevice}!"
     def device = getChildDevice("${jsonDevice.serial}")
     if (!device) {
         log.info "Device ${jsonDevice} is new! Adding to devices."
-        def winkHub = getChildDevice(hub)
         def hubAddr = winkHub.getDataValue("networkAddress")
         device = addChildDevice("smartwink", "${jsonDevice.type}", "${jsonDevice.serial}", location.hubs[0].id,
                                 [name: jsonDevice.name, completedSetup: true])
@@ -327,18 +351,31 @@ def asDevice(jsonDevice, hub) {
     return device
 }
 
-def discoverLutronDevices(hub) {
-    def netAddr = hub.getDeviceDataByName("networkAddress") ?: hub.latestState('networkAddress')?.stringValue
-    def dni = hub.deviceNetworkId
+def removeDevicesExcept(keptSerials) {
+    def toRemove = getChildDevices().findAll { !keptSerials.contains(it.deviceNetworkId) }
+    log.info "Removing ${toRemove.size()} de-selected devices. Keeping: ${keptSerials}"
+    toRemove.each {
+        log.debug "Removing device ${it.deviceNetworkId}"
+        deleteChildDevice(it.deviceNetworkId)
+    }
 
-    log.info("Discovering devices on ${dni}: GET http://${netAddr}/lutron.php. Device discovery mode? ${state.inDeviceDiscovery}")
+    state.foundDevices.removeAll { json-> !keptSerials.contains(json.serial) }
+}
 
+def discoverLutronDevices(hubMac) {
+    def netAddr = state.foundHubs[hubMac]
+    if (!netAddr) {
+        throw new IllegalArgumentException("Tried to add a device to a nonexistent hub: no hub found with mac ${hubMac}!")
+    }
+    netAddr += ":80"
+
+    log.info("Discovering devices on ${hubMac}: GET http://${netAddr}/lutron.php. Device discovery mode? ${state.inDeviceDiscovery}")
     sendHubCommand(new physicalgraph.device.HubAction([
             method: "GET",
             path: "/lutron.php",
             headers: [
                     HOST: netAddr
-            ]], "${dni}"))
+            ]], "${hubMac}"))
 }
 
 // </editor-fold>

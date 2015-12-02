@@ -59,23 +59,23 @@ def hubDiscovery() {
     }
 
     if (state.hubRefreshes % 5 == 1) {
-        startMdnsDiscovery("._wink._tcp")
+        startDiscovery()
     }
 
     dynamicPage(name:"hubDiscovery", title:"Hub Discovery Started!", nextPage:"deviceDiscovery", refreshInterval:refreshInterval, install:false, uninstall: true) {
         section("Please wait while we discover your Wink Hubs. This could take a few minutes. Select your device below once discovered.") {
-            // TODO: multiple: true can be enabled once pairing in that scenario is worked out.
+            // TODO: Better pairing support for multiple:true.
             input "selectedHubs", "enum", required:true, title:"Select Wink Hub (${state.hubMacToIp.size()} found)", multiple:true, options: state.hubMacToIp
         }
     }
 }
 
-def startMdnsDiscovery(name) {
-//	sendHubCommand(new physicalgraph.device.HubAction("lan discovery mdns/dns-sd ${name}", physicalgraph.device.Protocol.LAN))
-    state.hubMacToIp = [
-            "34:23:BA:EC:17:52": "10_3_0_5:1080"
-    ]
-    populateHubs(state.hubMacToIp.keySet())
+def startDiscovery() {
+    sendHubCommand(new physicalgraph.device.HubAction("lan discovery urn:schemas-smartwink:device:SmartWink:1", physicalgraph.device.Protocol.LAN))
+    //state.hubMacToIp = [
+    //        "34:23:BA:EC:17:52": "10_3_0_5:1080"
+    //]
+    //populateHubs(state.hubMacToIp.keySet())
 }
 
 def onLocation(evt) {
@@ -92,7 +92,8 @@ def onLocation(evt) {
         mac += macChar
     }
 
-    if (parsedEvent.mdnsPath) {
+    // Avoid the mistake the Hue hub makes - check for a specific SmartWink device type rather than Basic.
+    if (parsedEvent?.ssdpTerm?.contains("urn:schemas-smartwink:device:SmartWink:1")) {
         discoveredHub(parsedEvent)
     } else if (parsedEvent.headers && parsedEvent.body && parsedEvent.headers["Content-Type"]?.contains("json")) {
         def responseType = parsedEvent.headers["X-Response"]
@@ -142,11 +143,27 @@ def onLocation(evt) {
 
 private discoveredHub(parsedEvent) {
     // Found a hub. Check if it already exists, and add it if not.
-    def hubs = getHubs()
-    if (!(hubs."${parsedEvent?.mac?.toString()}")) {
-        hubs << ["${parsedEvent?.mac?.toString()}": parsedEvent]
+    log.info "Found SmartWink Hub via SSDP: ${parsedEvent}"
+    if (!parsedEvent?.mac) {
+        log.error "SmartWink SSDP discovery event doesn't seem to have a MAC address."
     }
-    state.hubMacToIp = hubsToMap(hubs)
+    def hubs = state.hubMacToIp
+    def newIp = convertHexToIP(parsedEvent.networkAddress)
+    def lastIp = hubs.put(parsedEvent.mac, newIp)
+    if (lastIp) {
+        updateHubIp(parsedEvent.mac, lastIp, newIp)
+    }
+}
+
+private updateHubIp(mac, oldIp, newIp) {
+    log.info "Wink Hub (${mac}) IP changed: ${oldIp} to ${newIp}. Updating child devices."
+    def hub = getChildDevice(mac)
+    if (!hub) {
+        log.info "Couldn't find hub device, likely still in discovery mode."
+        return
+    }
+
+
 }
 
 private dispatchDeviceEvent(parsedEvent, hub, json) {
@@ -163,22 +180,6 @@ private dispatchDeviceEvent(parsedEvent, hub, json) {
 
     device.handleEvent(parsedEvent, hub, json)
 }
-
-def getHubs() {
-    if (!state.hubs) { state.hubs = [:] }
-    state.hubs
-}
-
-private Map hubsToMap(hubs) {
-    def map = [:]
-    hubs.each {
-        def value = "${it.value.name}"
-        def key = "${it.value.mac}"
-        map["${key}"] = value
-    }
-    return map
-}
-
 
 def populateHubs(hubMacs) {
     return hubMacs.collect({ asHub(it) })
@@ -347,3 +348,13 @@ def discoverLutronDevices(hub) {
 }
 
 // </editor-fold>
+
+// TODO: m4
+
+private String convertHexToIP(hex) {
+    [convertHexToInt(hex[0..1]),convertHexToInt(hex[2..3]),convertHexToInt(hex[4..5]),convertHexToInt(hex[6..7])].join(".")
+}
+
+private Integer convertHexToInt(hex) {
+    Integer.parseInt(hex,16)
+}

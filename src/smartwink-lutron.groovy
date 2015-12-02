@@ -51,7 +51,7 @@ def initialize() {
 def hubDiscovery() {
     def refreshInterval = 3
 
-    state.hubMacToIp = state.hubMacToIp ?: []
+    state.hubMacToIp = state.hubMacToIp ?: [:]
     state.hubRefreshes = (state.hubRefreshes ?: 0) + 1
 
     if (state.hubRefreshes == 1) {
@@ -59,7 +59,7 @@ def hubDiscovery() {
     }
 
     if (state.hubRefreshes % 5 == 1) {
-        startDiscovery()
+        startHubDiscovery()
     }
 
     dynamicPage(name:"hubDiscovery", title:"Hub Discovery Started!", nextPage:"deviceDiscovery", refreshInterval:refreshInterval, install:false, uninstall: true) {
@@ -70,12 +70,8 @@ def hubDiscovery() {
     }
 }
 
-def startDiscovery() {
+def startHubDiscovery() {
     sendHubCommand(new physicalgraph.device.HubAction("lan discovery urn:schemas-smartwink:device:SmartWink:1", physicalgraph.device.Protocol.LAN))
-    //state.hubMacToIp = [
-    //        "34:23:BA:EC:17:52": "10_3_0_5:1080"
-    //]
-    //populateHubs(state.hubMacToIp.keySet())
 }
 
 def onLocation(evt) {
@@ -150,8 +146,8 @@ private discoveredHub(parsedEvent) {
     def hubs = state.hubMacToIp
     def newIp = convertHexToIP(parsedEvent.networkAddress)
     def lastIp = hubs.put(parsedEvent.mac, newIp)
-    if (lastIp) {
-        updateHubIp(parsedEvent.mac, lastIp, newIp)
+    if (lastIp && lastIp != newIp) {
+        //updateHubIp(parsedEvent.mac, lastIp, newIp)
     }
 }
 
@@ -162,8 +158,6 @@ private updateHubIp(mac, oldIp, newIp) {
         log.info "Couldn't find hub device, likely still in discovery mode."
         return
     }
-
-
 }
 
 private dispatchDeviceEvent(parsedEvent, hub, json) {

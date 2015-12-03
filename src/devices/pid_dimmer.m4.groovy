@@ -11,7 +11,7 @@ define(`__on_icon__', `st.switch.on')dnl
 define(`__off_icon__', `st.switch.off')dnl
 define(`__on_color__', `#79b821')dnl
 define(`__off_color__', `#ffffff')dnl
-include(`device_header.m4')
+include(`header.m4')
  */
 
 // include(`devices/abstract/caseta_dimmer.m4.groovy')

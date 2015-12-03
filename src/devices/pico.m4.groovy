@@ -11,7 +11,7 @@ define(`__on_icon__', `st.Home.home30')dnl
 define(`__off_icon__', `st.Home.home30')dnl
 define(`__on_color__', `#79b821')dnl
 define(`__off_color__', `#ffffff')dnl
-include(`device_header.m4')
+include(`header.m4')
  */
 
 metadata {

@@ -3,16 +3,12 @@ include(`app_constants.m4')dnl
 define(`__name__', __app__)dnl
 define(`__human_name__', __app__)dnl
 define(`__description__', `Links a rooted Wink Hub running the __app__ service to SmartThings. Allows use of Pico Remotes and Caseta dimmers from within SmartThings.')dnl
+define(`__file_description__', __description__)dnl
 define(`__author__', `Michael Barnathan')dnl
 define(`__author_email__', `michael@barnathan.name')dnl
 define(`__icon__', `http://cdn.device-icons.smartthings.com/Outdoor/outdoor18-icn.png')dnl
 define(`__icon2x__', `http://cdn.device-icons.smartthings.com/Outdoor/outdoor18-icn@2x.png')dnl
-
- *  __name__
- *
- *  Bidirectional SmartThings to Wink bridge for Lutron devices. Requires rooting and modifying the Wink Hub.
- *
- *  Author: __author__ (__author_email__)
+include(`header.m4')dnl
  */
 
 definition(

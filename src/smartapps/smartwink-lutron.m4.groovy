@@ -8,7 +8,7 @@ define(`__author__', `Michael Barnathan')dnl
 define(`__author_email__', `michael@barnathan.name')dnl
 define(`__icon__', `http://cdn.device-icons.smartthings.com/Outdoor/outdoor18-icn.png')dnl
 define(`__icon2x__', `http://cdn.device-icons.smartthings.com/Outdoor/outdoor18-icn@2x.png')dnl
-include(`header.m4')dnl
+include(`header.m4')
  */
 
 definition(

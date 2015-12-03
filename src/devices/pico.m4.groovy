@@ -1,26 +1,31 @@
-/**
- *  Lutron Pico Remote device type for SmartWink.
- *
- *  Author: Michael Barnathan (michael@barnathan.name)
+/**dnl
+include(`app_constants.m4')dnl
+define(`__name__', `PICO')dnl
+define(`__human_name__', `Pico remote')dnl 
+define(`__description__', `Lutron Pico Remote')dnl
+define(`__author__', `Michael Barnathan')dnl
+define(`__author_email__', `michael@barnathan.name')dnl
+define(`__icon__', `http://cdn.device-icons.smartthings.com/Home/home30-icn.png')dnl
+define(`__icon2x__', `http://cdn.device-icons.smartthings.com/Home/home30-icn@2x.png')dnl
+define(`__on_icon__', `st.Home.home30')dnl
+define(`__off_icon__', `st.Home.home30')dnl
+define(`__on_color__', `#79b821')dnl
+define(`__off_color__', `#ffffff')dnl
+include(`device_header.m4')
  */
 
 metadata {
     definition(
-            name: "PICO",
-            namespace: "smartwink",
-            author: "Michael Barnathan",
-            description: "Lutron Pico Remote",
-            category: "SmartThings Labs",
-            iconUrl: "http://cdn.device-icons.smartthings.com/Home/home30-icn.png",
-            iconX2Url: "http://cdn.device-icons.smartthings.com/Home/home30-icn@2x.png") {
-        attribute "hubAddress", "string"
+        // include(`definition.m4')
+    ) {
+        attribute "hubMac", "string"
         attribute "actAsDimmer", "enum", ["off", "on"]
 
-        capability "Actuator"       // no methods
+        capability "Actuator"       // no commands
         capability "Button"         // button.held and button.pushed
         capability "Refresh"        // refresh()
-        capability "Sensor"         // no methods
-        capability 'Switch'   		// on(), off()
+        capability "Sensor"         // no commands
+        capability "Switch"         // on(), off()
         capability 'Switch Level'   // setLevel(). Implemented in software to allow dimmer events.
                                     // (Picos have no hardware level indicators at this time).
         command "buttonUp"
@@ -35,15 +40,13 @@ metadata {
         command "unsubscribe"
     }
 
-    simulator {
-        // TODO: define status and reply messages here
-    }
+    simulator {}
 
     tiles(scale: 2) {
         multiAttributeTile(name:"switch", type: "lighting", width: 6, height: 4, canChangeIcon: true) {
             tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
-                attributeState "on", label:'on', action:"switch.off", icon:"st.Home.home30", backgroundColor:"#79b821", nextState:"off"
-                attributeState "off", label:'off', action:"switch.on", icon:"st.Home.home30", backgroundColor:"#ffffff", nextState:"on"
+                attributeState "on", label:'on', action:"switch.off", icon:"__on_icon__", backgroundColor:"__on_color__", nextState:"off"
+                attributeState "off", label:'off', action:"switch.on", icon:"__off_icon__", backgroundColor:"__off_color__", nextState:"on"
             }
             tileAttribute ("device.level", key: "SLIDER_CONTROL") {
                 attributeState "level", action: "switch level.setLevel"
@@ -83,12 +86,12 @@ metadata {
             state "", label:'FAVORITE', action: "buttonFavorite", icon: "st.Seasonal Winter.seasonal-winter-014"
         }
 
-        valueTile("hubAddress", "device.hubAddress", decoration: "flat", width: 2, height: 1) {
+        valueTile("hubMac", "device.hubMac", decoration: "flat", width: 2, height: 1) {
             state "default", label:'Wink Hub: ${currentValue}', width: 2, height: 1
         }
 
         main "switch"
-        details(["switch", "refresh", "dimmerButtons", "level", "buttonOn", "buttonOff", "buttonFavorite", "buttonUp", "buttonDown", "hubAddress"])
+        details(["switch", "refresh", "dimmerButtons", "level", "buttonOn", "buttonOff", "buttonFavorite", "buttonUp", "buttonDown", "hubMac"])
     }
 }
 
@@ -110,7 +113,7 @@ def off() {
 def setLevel(level) {
     def oldLevel = device.currentValue("level")
 
-    log.info("Pico remote ${device.deviceNetworkId} set level: ${level} from ${oldLevel}")
+    log.info("__human_name__ ${device.deviceNetworkId} set level: ${level} from ${oldLevel}")
     if (level == oldLevel || level > 100 || level < 0) return null
 
     sendEvent(name: "level", value: level)
@@ -179,13 +182,13 @@ def buttonOff() { return buttonPressed(BUTTON_OFF()) }
 def buttonFavorite() { return buttonPressed(BUTTON_FAVORITE()) }
 
 def handleEvent(parsedEvent, hub, json) {
-    log.info "Pico remote ${device.deviceNetworkId} handling event: ${json}"
+    log.info "__human_name__ ${device.deviceNetworkId} handling event: ${json}"
     if (json.containsKey("button")) {
         def button = json.button as Integer
         log.info "Sending button pushed event for button ${button}"
         buttonPressed(button)
     } else {
-        log.warn "Pico remote press event ${json} has no button attribute."
+        log.warn "__human_name__ press event ${json} has no button attribute."
     }
     return null
 }
@@ -193,7 +196,7 @@ def handleEvent(parsedEvent, hub, json) {
 def parse(description) {
     log.debug "Parsing '${description}'"
     if (description == "updated") {
-        log.trace "Pico remote was updated"
+        log.trace "__human_name__ was updated"
         return [];
     }
 
@@ -207,72 +210,12 @@ def parse(description) {
     } else if (keyVal[0] in ["level", "switch"]) {
         return createEvent(name: keyVal[0], value: keyVal[1])
     } else if (keyVal[0] == "updated") {
-        log.trace "Pico remote was updated"
+        log.trace "__human_name__ was updated"
         return null
     } else {
-        log.warn "Unknown event in Pico remote parse(): ${description}"
+        log.warn "Unknown event in __human_name__ parse(): ${description}"
         return null
     }
 }
 
-// TODO: Put in m4 block. SmartThings doesn't allow much code reuse.
-
-private getCallBackAddress() {
-    device.hub.getDataValue("localIP") + ":" + device.hub.getDataValue("localSrvPortTCP")
-}
-
-def subscribe() {
-    subscribe(getUpnpHost(), getUpnpPath())
-}
-
-def unsubscribe() {
-    log.info "Received unsubscribe request for ${device.deviceNetworkId}"
-    unsubscribe(getUpnpHost(), getUpnpPath())
-}
-
-private getUpnpHost() {
-    def upnp_port = 1081
-    def hubAddr = device.currentValue("hubAddress")
-
-    def addressParts = hubAddr.split(":")
-    def host = addressParts[0]
-    return "${host}:${upnp_port}"
-}
-
-private getUpnpPath() {
-    return "/upnp/event/${device.deviceNetworkId}/button"
-}
-
-def subscribe(host, path) {
-    def address = getCallBackAddress()
-    def callbackPath = "http://${address}/notify$path"
-    log.info "Received subscribe for ${device.deviceNetworkId} ($host, $path, $callbackPath)"
-
-    new physicalgraph.device.HubAction(
-            method: "SUBSCRIBE",
-            path: path,
-            headers: [
-                    HOST: host,
-                    CALLBACK: "<${callbackPath}>",
-                    NT: "upnp:event",
-                    TIMEOUT: "Second-3600"
-            ]
-    )
-}
-
-def unsubscribe(host, path) {
-    def sid = getDeviceDataByName("subscriptionId")
-    if (!sid) {
-        log.info "Unsubscribe without sid, probably not subscribed yet."
-        return null
-    }
-    log.trace "unsubscribe($host, $path, $sid)"
-    new physicalgraph.device.HubAction(
-            method: "UNSUBSCRIBE",
-            path: path,
-            headers: [
-                    HOST: host,
-                    SID: "uuid:${sid}",
-            ]
-    )
-}
+// include(`capabilities/subscribable.m4.groovy')

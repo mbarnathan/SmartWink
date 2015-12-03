@@ -343,5 +343,5 @@ private Integer convertHexToInt(hex) {
 }
 
 private getSmartThingsHub() {
-    return location.hubs.find { log.info it.localIP; it.localIP } ?: location.hubs[0]
+    return location.hubs.find { it.localIP } ?: location.hubs[0]
 }

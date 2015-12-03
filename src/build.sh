@@ -16,6 +16,4 @@ do
     done
 done
 
-set +x
-
 echo "Generated output files in $(readlink -f $BUILD_DIR)"

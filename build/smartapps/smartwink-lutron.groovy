@@ -52,7 +52,6 @@ def uninstalled() {
 
 def updated() {
     log.trace "SmartWink updated with settings: ${settings}"
-    unschedule()
 
     state.hubRefreshes = 0
     state.deviceRefreshes = 0
@@ -69,8 +68,10 @@ def updated() {
 
 def initialize() {
     log.debug "Initializing SmartWink"
+    unschedule()
     unsubscribe()
     subscribe(location, null, onLocation, [filterEvents:false])
+    runEvery10Minutes("startHubDiscovery")
 }
 
 // <editor-fold desc="Hub Discovery - returns map selectedHubs [mac: name]">
@@ -98,7 +99,7 @@ def hubDiscovery() {
 }
 
 def startHubDiscovery() {
-    // This must be kept synced between the hub and the app, or the hub will not be discovered.
+    // This SSDP type must be kept synced between the hub and the app, or the hub will not be discovered.
     sendHubCommand(new physicalgraph.device.HubAction("lan discovery urn:schemas-smartwink:device:SmartWink:1", physicalgraph.device.Protocol.LAN))
 }
 
@@ -310,6 +311,9 @@ private asDevice(hubMac, jsonDevice) {
     if (!device) {
         device = addChildDevice("smartwink", "${jsonDevice.type}", "${jsonDevice.serial}", getSmartThingsHub().id,
                                 [name: jsonDevice.name, completedSetup: true])
+        
+        // Instead of the questionable practice of storing the IP address directly, store the MAC and look up the IP
+        // from this SmartApp directly. This ensures that when the hub's IP changes, the devices remain accessible.
         device.sendEvent(name:"hubMac", value: hubMac)
         device.updateDataValue("hubMac", hubMac)
         device.refresh()

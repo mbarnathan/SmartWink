@@ -1,7 +1,7 @@
 # SmartWink
 Use Lutron Clear Connect devices on SmartThings using a rooted Wink Hub as a bridge!
 
-To install:
+## To install:
 
 This is a two part system. You'll need both the SmartApp and the Wink Hub software. I suggest using this on a Wink Hub you don't care about, since this installation will overwrite some system files and could potentially put the hub in a bad state if something goes wrong.
 
@@ -17,7 +17,7 @@ That's half of the installation. The other half is extracting the necessary file
 The tarball to extract to the Wink Hub is located in this repository, at "hub_software/binaries.tar.gz". You should be able to install it by SCPing it to the root directory on the Wink Hub (or downloading it directly on the hub with curl), gunzipping it, and untarring it. Note that this will overwrite some files on the hub, so a backup may be a good idea.
 
 Assuming the extraction went well with no error messages, reboot the hub (issue "reboot"), and check that everything is running:
-
+````
 [root@flex-dvt ~]# ps | grep smartwink
 1150 root     {lutron-monitor} /bin/sh /usr/share/smartwink/lutron-monitor -
 1169 root     {discovery-serve} /bin/sh /usr/share/smartwink/discovery-server
@@ -31,18 +31,17 @@ Assuming the extraction went well with no error messages, reboot the hub (issue 
 [{"id":9,"serial":11111111,"name":"Caseta Plug-in Dimmer","type":"PID_DIMMER"},
 {"id":10,"serial":22222222,"name":"Caseta Wall Dimmer","type":"WALL_DIMMER"},
 {"id":11,"serial":33333333,"name":"3 Button Pico with Raise\/Lower","type":"PICO"}]
-
+````
 (Your output will differ, and will be an empty array if you have nothing paired - but the important thing is that you can connect and don't get a 404).
 
 With those sanity checks out of the way, start up the app and give it a try! It should automatically discover the hub, and once selected, will discover your existing Lutron devices and allow you to pair new ones.
 
-Usage:
+## Usage:
 
 Once added, both Caseta dimmers and Pico remotes will appear as dimmer devices (Pico remotes also have button capabilities, and the virtual dimmer functionality can be disabled).
 Since the Pico remote device type has a virtual dimmer built in, Pico remotes may be used to synchronize a group of dimmable devices using an app such as Dim With Me.
-Pico remotes may also be used as button controllers, similar to Aeon Minimotes.
 
-Known issues:
+## Known issues:
 
 1. Button press events from Pico remotes are usually delivered in one serial read. Occasionally (~10%) they're split across two reads, and these presses will not be detected yet.
 2. Devices first install in the "on" state. The device may need to be toggled before it picks up the correct state.

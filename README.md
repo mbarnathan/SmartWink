@@ -36,6 +36,12 @@ Assuming the extraction went well with no error messages, reboot the hub (issue 
 
 With those sanity checks out of the way, start up the app and give it a try! It should automatically discover the hub, and once selected, will discover your existing Lutron devices and allow you to pair new ones.
 
+Usage:
+
+Once added, both Caseta dimmers and Pico remotes will appear as dimmer devices (Pico remotes also have button capabilities, and the virtual dimmer functionality can be disabled).
+Since the Pico remote device type has a virtual dimmer built in, Pico remotes may be used to synchronize a group of dimmable devices using an app such as Dim With Me.
+Pico remotes may also be used as button controllers, similar to Aeon Minimotes.
+
 Known issues:
 
 1. Button press events from Pico remotes are usually delivered in one serial read. Occasionally (~10%) they're split across two reads, and these presses will not be detected yet.

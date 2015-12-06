@@ -204,6 +204,7 @@ def deviceDiscovery() {
 
     state.inDeviceDiscovery = true
     state.pairingMode = false
+    state.pairStatus = null as Boolean
     state.foundDevices = state.foundDevices ?: [:]
 
     state.deviceRefreshes = (state.deviceRefreshes ?: 0) + 1
@@ -311,7 +312,7 @@ private asDevice(hubMac, jsonDevice) {
     if (!device) {
         device = addChildDevice("smartwink", "${jsonDevice.type}", "${jsonDevice.serial}", getSmartThingsHub().id,
                                 [name: jsonDevice.name, completedSetup: true])
-        
+
         // Instead of the questionable practice of storing the IP address directly, store the MAC and look up the IP
         // from this SmartApp directly. This ensures that when the hub's IP changes, the devices remain accessible.
         device.sendEvent(name:"hubMac", value: hubMac)

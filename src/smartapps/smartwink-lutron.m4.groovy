@@ -185,6 +185,7 @@ def deviceDiscovery() {
 
     state.inDeviceDiscovery = true
     state.pairingMode = false
+    state.pairStatus = null as Boolean
     state.foundDevices = state.foundDevices ?: [:]
 
     state.deviceRefreshes = (state.deviceRefreshes ?: 0) + 1

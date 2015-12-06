@@ -1,0 +1,47 @@
+#!/bin/sh
+
+# Send back a unicast response to the given IP.
+
+set -x
+
+MULTICAST="239.255.255.250"
+ST="urn:schemas-smartwink:device:SmartWink:1"
+#ST="urn:schemas-upnp-org:device:Basic:1"
+
+if [ $# -lt 5 ]; then
+  echo "Usage: $0 dest_ip dest_port local_ip local_port ifname" 2>&1
+  exit 1
+fi
+
+DEST_IP=$1
+DEST_PORT=$2
+SOURCE_IP=$3
+SOURCE_PORT=$4
+NIC=$5
+
+echo "Got ST message from $DEST_IP:$DEST_PORT on $SOURCE_IP $SOURCE_PORT ($NIC)" >&2
+
+# Derive UPnP-compliant UUID from MAC address.
+MAC=$(cat /sys/class/net/$NIC/address)
+UUID=$(echo -n $MAC | sed 's/\([^:]\)/\10/g' | sed 's/://' | sed 's/:/-/g' | sed 's/$/00000000/')
+
+HEADER="HTTP/1.1 200 OK
+HOST: $MULTICAST:$SOURCE_PORT
+EXT:
+CACHE-CONTROL: max-age=1800
+LOCATION: http://$SOURCE_IP:80/description.php?mac=$MAC&udn=$UUID
+SERVER: SmartWink/1.0 UPnP/1.0 SmartWink/1.0"
+
+respond() {
+  socat - UDP4-SENDTO:$DEST_IP:$DEST_PORT,sourceport=$SOURCE_PORT,reuseaddr,crnl <<EOF
+$HEADER
+ST: $1
+USN: $2
+
+EOF
+}
+
+# Send the three response messages necessary for discovery.
+respond "upnp:rootdevice" "uuid:$UUID::upnp:rootdevice"
+respond "uuid:$UUID" "uuid:$UUID"
+respond "$ST" "uuid:$UUID"

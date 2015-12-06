@@ -1,0 +1,19 @@
+#!/bin/bash
+
+cleanup() {
+    SIGNAL=$1
+    [ -n "$SOCAT_PID" ] && kill $SOCAT_PID 2>/dev/null
+    exit 0
+}
+
+trap "cleanup TERM" TERM
+trap "cleanup INT" INT
+trap "cleanup HUP" HUP
+
+while true
+do
+    socat TCP-listen:1081,fork,reuseaddr,crnl EXEC:'php /usr/share/smartwink/subscribe.php' &
+    SOCAT_PID=$!
+    wait $SOCAT_PID
+    usleep 100000
+done

@@ -1,0 +1,5 @@
+#!/bin/sh
+
+stty -F /dev/ttySP2 400:0:1cb2:0:0:0:0:0:0:0:1:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0 2>/dev/null
+slsnif -s 115200 -x /dev/ttySP2 | lutron-monitor - > /var/log/lutron-monitor.log &
+lutron-core

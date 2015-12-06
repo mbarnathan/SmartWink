@@ -1,0 +1,16 @@
+#!/bin/sh
+
+usage() {
+  echo "Usage: $0 <aprond output file>" >&2
+  exit 1
+}
+
+parse_lines() {
+  # This has to work with unbuffered output. So grep and cut are out, but
+  # sed and awk work.
+  sed -u -n -r 's/^Setting level on device ([0-9]+) to ([0-9]+)/\1 \2/p' | xargs -r -n 2 -t level-changed
+}
+
+[ $# -eq 0 ] && usage
+
+parse_lines $1

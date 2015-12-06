@@ -1,0 +1,27 @@
+#!/bin/sh
+
+usage() {
+  echo "Usage: $0 three byte remote_id button_id" >&2
+  exit 1
+}
+
+[ $# -ne 4 ] && usage
+
+BUTTON="$4"
+
+# Probably a split serial read, could also be an unsupported event.
+if [ $BUTTON -eq 81 ]; then
+   echo "$(date)	Split serial read or unsupported event from $DEVICE."
+   exit 0
+fi
+
+DEVICE="$1 $2 $3"
+DEC_DEVICE=$((0x$1$2$3))
+echo "$(date)	Device $DEC_DEVICE ($DEVICE) pressed button $BUTTON"
+
+# Flash sea green for 100ms to acknowledge button press.
+setrgb 007714:100
+
+JSON="{ \"button\": $BUTTON, \"serial\": \"$DEC_DEVICE\" }"
+
+dispatch-event "$DEC_DEVICE" "$JSON"

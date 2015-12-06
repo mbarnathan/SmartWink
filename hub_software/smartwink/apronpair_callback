@@ -1,0 +1,26 @@
+#!/bin/bash
+
+if [ $# -lt 2 ]; then
+  echo "Usage: $0 callback_url status" >&2
+  exit 1
+fi
+
+callback_url="$1"
+status="$2"
+JSON="{ \"status\": \"$status\" }"
+
+echo "Pairing status: $status"
+
+case "$status" in
+"ready")
+  setrgb -R 00ff00:500 000000:500
+  ;;
+"FLX_OK")
+  setrgb -s 0 -n 3 00ff00:100 000000:100; setrgb -s 1 00ff00:1000 000000:100 
+  ;;
+*)
+  setrgb ff0000:1000 000000:100
+  ;;
+esac
+
+curl -Ss -X POST --header "Content-type: application/json" --header "X-Response: DEVICE_PAIRED" --data "$JSON" "$callback_url"

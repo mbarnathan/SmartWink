@@ -1,0 +1,18 @@
+#!/bin/sh
+
+PORT=1900
+
+cleanup() {
+    SIGNAL=$1
+    [ -n "$SOCAT_PID" ] && kill $SOCAT_PID 2>/dev/null
+    exit 0
+}
+
+trap "cleanup TERM" TERM
+trap "cleanup INT" INT
+trap "cleanup HUP" HUP
+
+socat -u UDP4-RECVFROM:$PORT,ip-add-membership=239.255.255.250:wlan0,fork,ip-pktinfo,reuseaddr SYSTEM:"grep -o -E 'urn:schemas-smartwink:device:SmartWink:1\\\|ssdp:all\\\|ssdp:discover' | xargs -t -n 1 -r /usr/share/smartwink/discovery-respond \$SOCAT_PEERADDR \$SOCAT_PEERPORT \$SOCAT_IP_LOCADDR $PORT \$SOCAT_IP_IF" &
+
+SOCAT_PID=$!
+wait $SOCAT_PID

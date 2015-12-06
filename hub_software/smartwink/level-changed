@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -x
+
+usage() {
+  echo "Usage: $0 serial level" >&2
+  exit 1
+}
+
+[ $# -ne 2 ] && usage
+
+DEVICE="$1"
+LEVEL="$2"
+
+echo "$(date)	Device $DEVICE level set to $LEVEL"
+
+JSON="{ \"value\": $LEVEL, \"serial\": \"$DEVICE\" }"
+
+dispatch-event "$DEVICE" "$JSON"

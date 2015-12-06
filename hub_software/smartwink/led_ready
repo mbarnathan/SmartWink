@@ -1,0 +1,5 @@
+#!/bin/bash
+
+#set_rgb 127 83 0
+set_rgb 0 20 0
+

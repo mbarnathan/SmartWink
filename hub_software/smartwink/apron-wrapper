@@ -1,0 +1,5 @@
+#!/bin/sh
+
+set -e
+
+socat -u EXEC:/usr/sbin/aprond,stderr,pty,ctty,end-close - | apron-monitor -

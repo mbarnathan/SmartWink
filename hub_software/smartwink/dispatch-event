@@ -1,0 +1,11 @@
+#!/bin/bash
+
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 device json" >&2
+  exit 1
+fi
+
+DEVICE=$1
+JSON=$2
+
+grep "$DEVICE" /database/smartwink-subscriptions 2>/dev/null | cut -d' ' -f 3 | xargs -r curl -Ss -X POST --header "Content-type: application/json" --header "X-Response: DEVICE_EVENT" --data "$JSON"

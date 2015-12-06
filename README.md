@@ -14,7 +14,7 @@ Once saved and published, the SmartApp will appear as an option in the SmartThin
 
 That's half of the installation. The other half is extracting the necessary files onto your Wink Hub.
 
-The tarball to extract to the Wink Hub is currently lives on Dropbox: https://www.dropbox.com/s/wx3tvcikfxtn5nr/smartwink.tar.gz?dl=0
+The tarball to extract to the Wink Hub currently lives on Dropbox: https://www.dropbox.com/s/wx3tvcikfxtn5nr/smartwink.tar.gz?dl=0
 
 You should be able to install it by SSHing into the Wink Hub and issuing "cd /; curl https://www.dropbox.com/s/wx3tvcikfxtn5nr/smartwink.tar.gz?dl=0; gunzip smartwink.tar.gz; tar xvf smartwink.tar.gz". Note that this will overwrite some files on the hub, so a backup may be a good idea.
 

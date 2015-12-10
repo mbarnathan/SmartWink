@@ -9,7 +9,7 @@ parse_lines() {
   # This has to work with unbuffered output. So grep and cut are out, but
   # sed and awk work.
   # Note: It looks like Lutron IDs can be four bytes long! But apron only looks at 3, so we'll only look at 3.
-  sed -u -n '/^Device -->.*(00)[^(]*(81)/p' $1 | sed -u 's/[^)]*(\([0-9a-f]*\))[^(]*/\1 /g' | awk '{ printf "%s %s %s ", $8, $9, $10; if ($12=="00") { print $13 } else { print $12 }; fflush(); }' | sed -u -n '/^.. .. .. ..$/p' | xargs -r -n 4 button-pressed
+  sed -u -n '/^Device -->.*(00)[^(]*(81)/p' $1 | sed -u 's/[^)]*(\([0-9a-f]*\))[^(]*/\1 /g' | sed -u 's/^.*81 00 //' | awk '{ printf "%s %s %s ", $1, $2, $3; if ($5=="00") { print $6 } else { print $5 }; fflush(); }' | sed -u -n '/^.. .. .. ..$/p' | xargs -r -n 4 button-pressed
 }
 
 [ $# -eq 0 ] && usage

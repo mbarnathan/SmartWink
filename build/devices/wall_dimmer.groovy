@@ -109,7 +109,7 @@ def setLevel(level) {
     def netAddr = hubIp()
     def dni = device.deviceNetworkId
 
-    def scaledLevel = (level * 255 / 100) as Integer
+    int scaledLevel = level * 255 / 100
     log.debug "Sending scaled level ${scaledLevel} / 255 to device."
 
     return new physicalgraph.device.HubAction([
@@ -119,7 +119,7 @@ def setLevel(level) {
                     HOST: "${netAddr}:80",
                     "Content-Length": 0
             ],
-            query: [device: dni, attr: "Level", value: scaledLevel]
+            query: [device: dni, attr: "Level", value: "${scaledLevel}"]
     ], "${dni}")
 }
 

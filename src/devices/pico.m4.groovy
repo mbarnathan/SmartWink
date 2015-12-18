@@ -130,7 +130,7 @@ def incrementLevel(int increment) {
 }
 
 private boolean isActingAsDimmer() {
-    return device.currentValue("actAsDimmer") == "on"
+    return device.currentValue("actAsDimmer") != "off"
 }
 
 def enableDimming() {

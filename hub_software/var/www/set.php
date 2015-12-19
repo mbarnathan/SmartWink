@@ -15,6 +15,7 @@ function emsg($msg) {
 
 $db = "/database/apron.db";
 $dbh = new SQLite3($db);
+$dbh->busyTimeout(5000);
 $escaped_attr = SQLite3::escapeString($attr);
 $attr_result = $dbh->query("SELECT attributeId FROM lutronAttribute WHERE description LIKE '$escaped_attr'");
 
@@ -27,12 +28,14 @@ $row = $device_result->fetchArray(SQLITE3_ASSOC) or emsg("No such device.");
 $master_id = $row["masterId"];
 
 $dbh->close(); 
+unset($dbh);
 $cmd = "aprontest -u -m $master_id -t $attr_id -v $escaped_value | sed 's/[[:space:]][[:space:]]*/ /g' | grep '^[[:space:]][[:alnum:]]*: [A-Za-z0-9\-_]*$' | sed 's/^ //'";
 
 $output = `$cmd`;
 $lines = explode(PHP_EOL, $output);
 
 $data = array(
+  "cmd" => $cmd,
   "serial" => $dev,
   "attr" => $attr,
   "value" => $value,

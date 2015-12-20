@@ -155,6 +155,21 @@ def onLocation(evt) {
                 // These events are supposed to fire parse(), but because that relies on the DNI being the MAC address,
                 // and since these events are all coming from the same MAC, we must handle it here instead.
                 return dispatchDeviceEvent(parsedEvent, mac, json)
+            case "DEVICE_LINKED":
+                // Hard pairing or unpairing completed.
+                json.each { serial, data ->
+                    def controller = getChildDevice("${serial}")
+                    if (!controller) {
+                        log.warn "Pairing event from unknown SmartWink device: ${json.serial}. Full response: ${data}"
+                    } else {
+                        def added = data.added.collect { getChildDevice("${it}")?.displayName }.join(", ")
+                        def removed = data.removed.collect { getChildDevice("${it}")?.displayName }.join(", ")
+                        def msg = "${controller.displayName} hard-paired: added [${added}], removed [${removed}]"
+                        log.info msg
+                        sendNotificationEvent(msg)
+                    }
+                }
+                break
             case "":
                 log.debug "Empty X-Response, probably not a SmartWink message. Ignoring."
                 break

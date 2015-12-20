@@ -54,6 +54,7 @@ metadata {
         command "disableDimming"
         command "subscribe"
         command "unsubscribe"
+        command "setPairList", ["string", "string"] // Comma separated dimmer IDs, followed by CS remote IDs to sync.
     }
 
     simulator {}
@@ -196,6 +197,23 @@ def buttonUp() { return buttonPressed(BUTTON_UP()) }
 def buttonOn() { return buttonPressed(BUTTON_ON()) }
 def buttonOff() { return buttonPressed(BUTTON_OFF()) }
 def buttonFavorite() { return buttonPressed(BUTTON_FAVORITE()) }
+
+// Comma separated string of dimmer and remote IDs.
+def setPairList(dimmerList, remoteList) {
+    def dni = device.deviceNetworkId
+    log.info "Pico remote [${remoteList}] setting pairing list to [${dimmerList}]"
+    def netAddr = hubIp()
+
+    return new physicalgraph.device.HubAction([
+            method: "POST",
+            path: "/pico_dimmers.php",
+            headers: [
+                    HOST: "${netAddr}:80",
+                    "Content-Length": 0
+            ],
+            query: [pico: remoteList, caseta: dimmerList]
+    ], "${dni}")
+}
 
 def handleEvent(parsedEvent, hub, json) {
     log.info "Pico remote ${device.deviceNetworkId} handling event: ${json}"

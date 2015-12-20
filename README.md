@@ -12,6 +12,8 @@ The SmartApp lives in the "build" directory. Just copy the SmartApp and all devi
 
 Once saved and published, the SmartApp will appear as an option in the SmartThings mobile app, under "my apps".
 
+You can also add hardlink-pico.groovy to allow Pico remotes to be paired directly in hardware to Caseta dimmers through the SmartThings UI! This is a super fast and reliable way to control lights, much moreso than going through the SmartThings hub!
+
 That's half of the installation. The other half is extracting the necessary files onto your Wink Hub.
 
 The tarball to extract to the Wink Hub is located in this repository, at "hub_software/binaries.tar.gz". You should be able to install it by SCPing it to the root directory on the Wink Hub (or downloading it directly on the hub with curl), gunzipping it, and untarring it. Note that this will overwrite some files on the hub, so a backup may be a good idea.

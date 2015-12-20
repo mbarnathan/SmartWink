@@ -22,11 +22,13 @@ $attr_result = $dbh->query("SELECT attributeId FROM lutronAttribute WHERE descri
 $row = $attr_result->fetchArray(SQLITE3_ASSOC) or emsg("No such attribute");
 
 $attr_id = $row["attributeId"];
+$attr_result->finalize();
 
 $device_result = $dbh->query("SELECT masterId FROM lutronDevice WHERE lNodeId = $dev");
 $row = $device_result->fetchArray(SQLITE3_ASSOC) or emsg("No such device.");
 $master_id = $row["masterId"];
 
+$device_result->finalize();
 $dbh->close(); 
 unset($dbh);
 $cmd = "aprontest -u -m $master_id -t $attr_id -v $escaped_value | sed 's/[[:space:]][[:space:]]*/ /g' | grep '^[[:space:]][[:alnum:]]*: [A-Za-z0-9\-_]*$' | sed 's/^ //'";

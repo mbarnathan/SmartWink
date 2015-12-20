@@ -9,6 +9,7 @@ while ($row = $devs->fetchArray(SQLITE3_ASSOC)) {
   $data[] = $row;
 }
 
+$devs->finalize();
 $dbh->close();
 header('Content-Type: application/json');
 header('X-Response: DEVICE_DISCOVERY');

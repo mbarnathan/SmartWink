@@ -52,9 +52,11 @@ $to_lookup = array();
 foreach ($picos as $pico) {
   $to_add[$pico] = array_diff($new_dimmers, $existing_dimmers[$pico]);
   $to_remove[$pico] = array_diff($existing_dimmers[$pico], $new_dimmers);
-  $to_lookup += $to_add[$pico] + $to_remove[$pico];
+  $to_lookup = array_merge($to_lookup, $to_add[$pico], $to_remove[$pico]);
   $to_lookup[] = $pico;
 }
+
+$to_lookup = array_unique($to_lookup);
 
 // Look up master IDs.
 

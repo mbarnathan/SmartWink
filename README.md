@@ -50,3 +50,7 @@ Since the Pico remote device type has a virtual dimmer built in, Pico remotes ma
 3. I've sometimes seen it take a minute or two to first install a device. I think the write to /database/smartwink_subscriptions is being buffered, if anyone wants to investigate.
 4. I only have the v1 SmartThings hub, so I have no idea if any of this works with the SmartThings v2 hub.
 5. The Wink Hub piece needs a proper installer, or firmware. I didn't package it in this way because I didn't want to take the chance of bricking my only hub, or running afoul of Wink for redistributing their software.
+
+## Attribution:
+
+The binary distribution includes the opkg, slsnif, and strace binaries from @evq's <a href="https://gist.github.com/evq/9ddac40ea11e0156719e">opkg repository</a> for use with the <a href="https://github.com/evq/lutron-spy">lutron-spy</a> project.

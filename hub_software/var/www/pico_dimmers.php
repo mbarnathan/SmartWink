@@ -61,6 +61,10 @@ $to_lookup = array_unique($to_lookup);
 // Look up master IDs.
 
 $db = "/database/apron.db";
+if (!file_exists($db)) {
+  $db = "/var/lib/database/apron.db";
+}
+
 $dbh = new SQLite3($db);
 $dbh->busyTimeout(15000);
 

@@ -14,6 +14,10 @@ function emsg($msg) {
 }
 
 $db = "/database/apron.db";
+if (!file_exists($db)) {
+  $db = "/var/lib/database/apron.db";
+}
+
 $dbh = new SQLite3($db);
 $dbh->busyTimeout(5000);
 $escaped_attr = SQLite3::escapeString($attr);
